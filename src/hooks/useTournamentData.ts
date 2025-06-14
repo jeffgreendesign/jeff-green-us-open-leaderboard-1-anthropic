@@ -26,43 +26,70 @@ export const useTournamentData = () => {
   const [players, setPlayers] = useState<TournamentScore[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const fetchTournamentData = async () => {
+    try {
+      // Fetch active tournament
+      const { data: tournamentData, error: tournamentError } = await supabase
+        .from('tournaments')
+        .select('*')
+        .eq('status', 'active')
+        .single();
+
+      if (tournamentError) {
+        throw tournamentError;
+      }
+
+      setTournament(tournamentData);
+
+      // Fetch tournament scores
+      const { data: scoresData, error: scoresError } = await supabase
+        .from('tournament_scores')
+        .select('*')
+        .eq('tournament_id', tournamentData.id)
+        .order('position', { ascending: true });
+
+      if (scoresError) {
+        throw scoresError;
+      }
+
+      setPlayers(scoresData || []);
+    } catch (err) {
+      console.error('Error fetching tournament data:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const syncLiveData = async () => {
+    setSyncing(true);
+    setError(null);
+    
+    try {
+      console.log('Manually syncing tournament data...');
+      
+      const { data, error } = await supabase.functions.invoke('sync-tournament-data');
+      
+      if (error) {
+        throw error;
+      }
+      
+      console.log('Sync response:', data);
+      
+      // Refresh local data after sync
+      await fetchTournamentData();
+      
+    } catch (err) {
+      console.error('Error syncing live data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to sync live data');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchTournamentData = async () => {
-      try {
-        // Fetch active tournament
-        const { data: tournamentData, error: tournamentError } = await supabase
-          .from('tournaments')
-          .select('*')
-          .eq('status', 'active')
-          .single();
-
-        if (tournamentError) {
-          throw tournamentError;
-        }
-
-        setTournament(tournamentData);
-
-        // Fetch tournament scores
-        const { data: scoresData, error: scoresError } = await supabase
-          .from('tournament_scores')
-          .select('*')
-          .eq('tournament_id', tournamentData.id)
-          .order('position', { ascending: true });
-
-        if (scoresError) {
-          throw scoresError;
-        }
-
-        setPlayers(scoresData || []);
-      } catch (err) {
-        console.error('Error fetching tournament data:', err);
-        setError(err instanceof Error ? err.message : 'An error occurred');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchTournamentData();
 
     // Set up real-time subscription for tournament scores
@@ -88,5 +115,12 @@ export const useTournamentData = () => {
     };
   }, []);
 
-  return { tournament, players, loading, error };
+  return { 
+    tournament, 
+    players, 
+    loading, 
+    error, 
+    syncing, 
+    syncLiveData 
+  };
 };

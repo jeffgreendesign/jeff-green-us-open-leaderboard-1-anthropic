@@ -1,1 +1,5 @@
+
 project_id = "zdamorywselfdtxpoqyq"
+
+[functions.sync-tournament-data]
+verify_jwt = false
