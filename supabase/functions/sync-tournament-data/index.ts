@@ -12,7 +12,7 @@ interface ESPNPlayer {
   id: string;
   displayName: string;
   status: {
-    position: {
+    position?: {
       displayValue: string;
     };
     score?: {
@@ -66,11 +66,24 @@ serve(async (req) => {
     const espnData = await espnResponse.json();
     console.log('ESPN data fetched successfully');
 
-    // Find an active tournament
-    const activeTournament = espnData.events?.find((event: ESPNTournament) => 
-      event.status?.type?.description === 'In Progress' || 
-      event.status?.type?.description === 'Live'
-    ) || espnData.events?.[0]; // Fallback to first event if none are live
+    // Find the US Open specifically or any active tournament
+    let activeTournament = espnData.events?.find((event: ESPNTournament) => 
+      event.name.toLowerCase().includes('u.s. open') || 
+      event.name.toLowerCase().includes('us open')
+    );
+
+    // If no US Open found, look for any live tournament
+    if (!activeTournament) {
+      activeTournament = espnData.events?.find((event: ESPNTournament) => 
+        event.status?.type?.description === 'In Progress' || 
+        event.status?.type?.description === 'Live'
+      );
+    }
+
+    // Fallback to first available tournament
+    if (!activeTournament) {
+      activeTournament = espnData.events?.[0];
+    }
 
     if (!activeTournament) {
       throw new Error('No tournament data found');
@@ -82,6 +95,7 @@ serve(async (req) => {
     }
 
     console.log(`Processing tournament: ${activeTournament.name}`);
+    console.log(`Tournament status: ${activeTournament.status?.type?.description || 'Unknown'}`);
 
     // Update or create tournament
     const { data: existingTournament, error: tournamentSelectError } = await supabase
@@ -123,26 +137,54 @@ serve(async (req) => {
       console.log('Created new tournament:', tournamentId);
     }
 
-    // Process players
+    // Process players with more lenient filtering
     const players = competition.competitors || [];
     console.log(`Processing ${players.length} players`);
 
     const playerUpdates = players
-      .filter((player: ESPNPlayer) => player.displayName && player.status?.position?.displayValue)
+      .filter((player: ESPNPlayer) => {
+        // More lenient filtering - just need a name
+        return player.displayName && player.displayName.trim().length > 0;
+      })
       .map((player: ESPNPlayer, index: number) => {
-        const position = parseInt(player.status.position.displayValue.replace(/[^\d]/g, '')) || index + 1;
-        let score = 0;
-        
-        if (player.status.score?.displayValue) {
-          const scoreStr = player.status.score.displayValue;
-          if (scoreStr === 'E') {
-            score = 0;
-          } else if (scoreStr.includes('+')) {
-            score = parseInt(scoreStr.replace('+', ''));
-          } else if (scoreStr.includes('-')) {
-            score = parseInt(scoreStr);
+        // Handle position - extract number or use index + 1
+        let position = index + 1;
+        if (player.status?.position?.displayValue) {
+          const posStr = player.status.position.displayValue;
+          const posMatch = posStr.match(/\d+/);
+          if (posMatch) {
+            position = parseInt(posMatch[0]);
           }
         }
+        
+        // Handle score more robustly
+        let score = 0;
+        if (player.status?.score?.displayValue) {
+          const scoreStr = player.status.score.displayValue.trim();
+          console.log(`Player ${player.displayName} score string: "${scoreStr}"`);
+          
+          if (scoreStr === 'E' || scoreStr === 'EVEN') {
+            score = 0;
+          } else if (scoreStr.includes('+')) {
+            const scoreMatch = scoreStr.match(/\+(\d+)/);
+            if (scoreMatch) {
+              score = parseInt(scoreMatch[1]);
+            }
+          } else if (scoreStr.includes('-')) {
+            const scoreMatch = scoreStr.match(/-(\d+)/);
+            if (scoreMatch) {
+              score = -parseInt(scoreMatch[1]);
+            }
+          } else {
+            // Try to parse as a number directly
+            const numScore = parseInt(scoreStr);
+            if (!isNaN(numScore)) {
+              score = numScore;
+            }
+          }
+        }
+
+        console.log(`Player: ${player.displayName}, Position: ${position}, Score: ${score}`);
 
         return {
           tournament_id: tournamentId,
@@ -153,14 +195,17 @@ serve(async (req) => {
           previous_position: null // ESPN doesn't provide this, could be calculated from previous sync
         };
       })
-      .slice(0, 15); // Limit to top 15 players
+      .slice(0, 20); // Increase to top 20 players
+
+    console.log(`Filtered to ${playerUpdates.length} valid players`);
 
     if (playerUpdates.length === 0) {
       console.log('No valid player data to update');
       return new Response(JSON.stringify({ 
         success: true, 
         message: 'No player data to update',
-        tournament: activeTournament.name 
+        tournament: activeTournament.name,
+        rawPlayersCount: players.length
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -192,8 +237,10 @@ serve(async (req) => {
     return new Response(JSON.stringify({ 
       success: true,
       tournament: activeTournament.name,
+      tournamentStatus: activeTournament.status?.type?.description || 'Unknown',
       playersUpdated: playerUpdates.length,
-      location: competition.venue?.fullName
+      location: competition.venue?.fullName,
+      totalPlayersFromESPN: players.length
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
