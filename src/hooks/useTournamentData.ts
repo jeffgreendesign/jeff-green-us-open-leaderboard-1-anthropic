@@ -30,15 +30,25 @@ export const useTournamentData = () => {
 
   const fetchTournamentData = async () => {
     try {
-      // Fetch active tournament
+      // Fetch active tournaments (get the most recent one if multiple exist)
       const { data: tournamentData, error: tournamentError } = await supabase
         .from('tournaments')
         .select('*')
         .eq('status', 'active')
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (tournamentError) {
         throw tournamentError;
+      }
+
+      if (!tournamentData) {
+        console.log('No active tournament found');
+        setTournament(null);
+        setPlayers([]);
+        setLoading(false);
+        return;
       }
 
       setTournament(tournamentData);
