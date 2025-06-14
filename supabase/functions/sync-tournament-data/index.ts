@@ -10,16 +10,12 @@ const corsHeaders = {
 
 interface ESPNPlayer {
   id: string;
-  displayName: string;
-  status?: {
-    position?: {
-      displayValue: string;
-    };
-    score?: {
-      displayValue: string;
-    };
-    thru?: string;
+  athlete: {
+    displayName: string;
+    fullName: string;
   };
+  score: string;
+  status?: string;
 }
 
 interface ESPNTournament {
@@ -137,58 +133,44 @@ serve(async (req) => {
       console.log('Created new tournament:', tournamentId);
     }
 
-    // Process players with very lenient filtering
+    // Process players with corrected data structure
     const players = competition.competitors || [];
     console.log(`Processing ${players.length} players from ESPN`);
 
     // Log first few players to understand the data structure
-    console.log('Sample player data:', JSON.stringify(players.slice(0, 3), null, 2));
+    console.log('Sample player data:', JSON.stringify(players.slice(0, 2), null, 2));
 
     const playerUpdates = players
       .filter((player: ESPNPlayer) => {
-        // Only require a valid display name
-        const hasName = player.displayName && player.displayName.trim().length > 0;
+        // Check if player has valid athlete data
+        const hasName = player.athlete?.displayName && player.athlete.displayName.trim().length > 0;
         if (!hasName) {
-          console.log('Skipping player without name:', player);
+          console.log('Skipping player without name:', player.athlete?.displayName || 'No name');
         }
         return hasName;
       })
       .map((player: ESPNPlayer, index: number) => {
-        // Handle position more flexibly
-        let position = index + 1; // Default position based on order
-        if (player.status?.position?.displayValue) {
-          const posStr = player.status.position.displayValue;
-          console.log(`Player ${player.displayName} position string: "${posStr}"`);
-          
-          // Try to extract number from position string
-          const posMatch = posStr.match(/(\d+)/);
-          if (posMatch) {
-            position = parseInt(posMatch[1]);
-          } else if (posStr.toLowerCase().includes('cut')) {
-            position = 999; // Set high number for missed cut
-          } else if (posStr.toLowerCase().includes('wd')) {
-            position = 998; // Set high number for withdrawal
-          }
-        }
+        // Use the player's order in the array as position (ESPN sorts by position)
+        let position = index + 1;
         
-        // Handle score more robustly - accept any format
+        // Parse score from the score string
         let score = 0;
-        if (player.status?.score?.displayValue) {
-          const scoreStr = player.status.score.displayValue.trim();
-          console.log(`Player ${player.displayName} score string: "${scoreStr}"`);
+        if (player.score) {
+          const scoreStr = player.score.trim();
+          console.log(`Player ${player.athlete.displayName} score string: "${scoreStr}"`);
           
-          if (scoreStr === 'E' || scoreStr === 'EVEN' || scoreStr === '0') {
+          if (scoreStr === 'E' || scoreStr === 'EVEN') {
             score = 0;
-          } else if (scoreStr.includes('+')) {
-            const scoreMatch = scoreStr.match(/\+(\d+)/);
-            if (scoreMatch) {
-              score = parseInt(scoreMatch[1]);
-            }
-          } else if (scoreStr.includes('-')) {
-            const scoreMatch = scoreStr.match(/-(\d+)/);
-            if (scoreMatch) {
-              score = -parseInt(scoreMatch[1]);
-            }
+          } else if (scoreStr.startsWith('+')) {
+            score = parseInt(scoreStr.substring(1)) || 0;
+          } else if (scoreStr.startsWith('-')) {
+            score = parseInt(scoreStr) || 0; // Already has negative sign
+          } else if (scoreStr.toLowerCase().includes('cut')) {
+            position = 999; // Set high number for missed cut
+            score = 999;
+          } else if (scoreStr.toLowerCase().includes('wd')) {
+            position = 998; // Set high number for withdrawal
+            score = 998;
           } else {
             // Try to parse as a direct number
             const numScore = parseInt(scoreStr.replace(/[^\-\d]/g, ''));
@@ -198,11 +180,11 @@ serve(async (req) => {
           }
         }
 
-        console.log(`Processed player: ${player.displayName}, Position: ${position}, Score: ${score}`);
+        console.log(`Processed player: ${player.athlete.displayName}, Position: ${position}, Score: ${score}`);
 
         return {
           tournament_id: tournamentId,
-          player_name: player.displayName,
+          player_name: player.athlete.displayName,
           current_score: score,
           position: position,
           rounds_played: 2, // Default assumption
