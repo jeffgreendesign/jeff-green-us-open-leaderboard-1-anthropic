@@ -11,7 +11,7 @@ const corsHeaders = {
 interface ESPNPlayer {
   id: string;
   displayName: string;
-  status: {
+  status?: {
     position?: {
       displayValue: string;
     };
@@ -137,33 +137,47 @@ serve(async (req) => {
       console.log('Created new tournament:', tournamentId);
     }
 
-    // Process players with more lenient filtering
+    // Process players with very lenient filtering
     const players = competition.competitors || [];
-    console.log(`Processing ${players.length} players`);
+    console.log(`Processing ${players.length} players from ESPN`);
+
+    // Log first few players to understand the data structure
+    console.log('Sample player data:', JSON.stringify(players.slice(0, 3), null, 2));
 
     const playerUpdates = players
       .filter((player: ESPNPlayer) => {
-        // More lenient filtering - just need a name
-        return player.displayName && player.displayName.trim().length > 0;
+        // Only require a valid display name
+        const hasName = player.displayName && player.displayName.trim().length > 0;
+        if (!hasName) {
+          console.log('Skipping player without name:', player);
+        }
+        return hasName;
       })
       .map((player: ESPNPlayer, index: number) => {
-        // Handle position - extract number or use index + 1
-        let position = index + 1;
+        // Handle position more flexibly
+        let position = index + 1; // Default position based on order
         if (player.status?.position?.displayValue) {
           const posStr = player.status.position.displayValue;
-          const posMatch = posStr.match(/\d+/);
+          console.log(`Player ${player.displayName} position string: "${posStr}"`);
+          
+          // Try to extract number from position string
+          const posMatch = posStr.match(/(\d+)/);
           if (posMatch) {
-            position = parseInt(posMatch[0]);
+            position = parseInt(posMatch[1]);
+          } else if (posStr.toLowerCase().includes('cut')) {
+            position = 999; // Set high number for missed cut
+          } else if (posStr.toLowerCase().includes('wd')) {
+            position = 998; // Set high number for withdrawal
           }
         }
         
-        // Handle score more robustly
+        // Handle score more robustly - accept any format
         let score = 0;
         if (player.status?.score?.displayValue) {
           const scoreStr = player.status.score.displayValue.trim();
           console.log(`Player ${player.displayName} score string: "${scoreStr}"`);
           
-          if (scoreStr === 'E' || scoreStr === 'EVEN') {
+          if (scoreStr === 'E' || scoreStr === 'EVEN' || scoreStr === '0') {
             score = 0;
           } else if (scoreStr.includes('+')) {
             const scoreMatch = scoreStr.match(/\+(\d+)/);
@@ -176,36 +190,37 @@ serve(async (req) => {
               score = -parseInt(scoreMatch[1]);
             }
           } else {
-            // Try to parse as a number directly
-            const numScore = parseInt(scoreStr);
+            // Try to parse as a direct number
+            const numScore = parseInt(scoreStr.replace(/[^\-\d]/g, ''));
             if (!isNaN(numScore)) {
               score = numScore;
             }
           }
         }
 
-        console.log(`Player: ${player.displayName}, Position: ${position}, Score: ${score}`);
+        console.log(`Processed player: ${player.displayName}, Position: ${position}, Score: ${score}`);
 
         return {
           tournament_id: tournamentId,
           player_name: player.displayName,
           current_score: score,
           position: position,
-          rounds_played: 2, // Default assumption for ongoing tournament
-          previous_position: null // ESPN doesn't provide this, could be calculated from previous sync
+          rounds_played: 2, // Default assumption
+          previous_position: null
         };
       })
-      .slice(0, 20); // Increase to top 20 players
+      .slice(0, 50); // Get top 50 players
 
-    console.log(`Filtered to ${playerUpdates.length} valid players`);
+    console.log(`Processed ${playerUpdates.length} valid players for database update`);
 
     if (playerUpdates.length === 0) {
-      console.log('No valid player data to update');
+      console.log('Warning: No valid player data to update - this might indicate a data format issue');
       return new Response(JSON.stringify({ 
-        success: true, 
-        message: 'No player data to update',
+        success: false, 
+        message: 'No player data to update - possible data format issue',
         tournament: activeTournament.name,
-        rawPlayersCount: players.length
+        rawPlayersCount: players.length,
+        samplePlayer: players[0] || null
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -229,6 +244,7 @@ serve(async (req) => {
 
     if (insertError) {
       console.error('Error inserting player scores:', insertError);
+      console.error('Sample player update:', playerUpdates[0]);
       throw insertError;
     }
 
