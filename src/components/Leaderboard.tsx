@@ -145,7 +145,8 @@ const Leaderboard: React.FC = () => {
                     name: player.player_name,
                     position: player.position,
                     score: player.current_score,
-                    previousPosition: player.previous_position || undefined
+                    previousPosition: player.previous_position || undefined,
+                    isTied: player.isTied
                   }} 
                   index={index} 
                 />
@@ -156,7 +157,7 @@ const Leaderboard: React.FC = () => {
 
         <div className="mt-8 text-center text-white/80">
           <p className="text-sm">
-            Live data from ESPN API • Real-time updates via Supabase • Scores relative to par
+            Live data from ESPN API • Real-time updates via Supabase • Scores relative to par • USGA tie system
           </p>
         </div>
       </div>

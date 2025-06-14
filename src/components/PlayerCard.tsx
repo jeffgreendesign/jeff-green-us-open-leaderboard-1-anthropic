@@ -8,6 +8,7 @@ interface Player {
   position: number;
   score: number;
   previousPosition?: number;
+  isTied?: boolean;
 }
 
 interface PlayerCardProps {
@@ -43,6 +44,11 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, index }) => {
     return 'text-white';
   };
 
+  const formatPosition = () => {
+    if (player.position === 1) return '#1';
+    return player.isTied ? `#${player.position}T` : `#${player.position}`;
+  };
+
   return (
     <div 
       className={`${getCardGradient()} rounded-xl p-4 mb-3 shadow-lg transform transition-all duration-500 hover:scale-105 animate-fade-in`}
@@ -52,7 +58,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, index }) => {
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
             <div className={`w-12 h-12 rounded-full ${player.position === 1 ? 'bg-yellow-300' : player.position === 2 ? 'bg-gray-200' : player.position === 3 ? 'bg-amber-500' : 'bg-white/20'} flex items-center justify-center font-bold text-lg ${player.position <= 3 ? 'text-gray-800' : 'text-white'}`}>
-              {player.position === 1 ? <Trophy className="w-6 h-6 text-yellow-600" /> : player.position}
+              {player.position === 1 ? <Trophy className="w-6 h-6 text-yellow-600" /> : formatPosition().replace('#', '')}
             </div>
             {getPositionIcon()}
           </div>
@@ -69,7 +75,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, index }) => {
         
         <div className="text-right">
           <div className={`text-3xl font-bold ${getTextColor()}`}>
-            #{player.position}
+            {formatPosition()}
           </div>
         </div>
       </div>

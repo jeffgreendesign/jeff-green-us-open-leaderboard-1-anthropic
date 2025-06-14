@@ -19,6 +19,7 @@ interface TournamentScore {
   position: number;
   previous_position: number | null;
   rounds_played: number;
+  isTied?: boolean;
 }
 
 export const useTournamentData = () => {
@@ -27,6 +28,38 @@ export const useTournamentData = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+
+  const calculateTies = (players: TournamentScore[]): TournamentScore[] => {
+    // Sort by current score (lower is better in golf)
+    const sortedPlayers = [...players].sort((a, b) => a.current_score - b.current_score);
+    
+    const playersWithTies: TournamentScore[] = [];
+    let currentPosition = 1;
+    
+    for (let i = 0; i < sortedPlayers.length; i++) {
+      const player = sortedPlayers[i];
+      
+      // Check if this player is tied with the previous player
+      const prevPlayer = sortedPlayers[i - 1];
+      const nextPlayer = sortedPlayers[i + 1];
+      
+      const isTiedWithPrev = prevPlayer && prevPlayer.current_score === player.current_score;
+      const isTiedWithNext = nextPlayer && nextPlayer.current_score === player.current_score;
+      
+      // If not tied with previous player, update position
+      if (!isTiedWithPrev) {
+        currentPosition = i + 1;
+      }
+      
+      playersWithTies.push({
+        ...player,
+        position: currentPosition,
+        isTied: isTiedWithPrev || isTiedWithNext
+      });
+    }
+    
+    return playersWithTies;
+  };
 
   const fetchTournamentData = async () => {
     try {
@@ -58,13 +91,15 @@ export const useTournamentData = () => {
         .from('tournament_scores')
         .select('*')
         .eq('tournament_id', tournamentData.id)
-        .order('position', { ascending: true });
+        .order('current_score', { ascending: true }); // Order by score for tie calculation
 
       if (scoresError) {
         throw scoresError;
       }
 
-      setPlayers(scoresData || []);
+      // Calculate ties and set players
+      const playersWithTies = calculateTies(scoresData || []);
+      setPlayers(playersWithTies);
     } catch (err) {
       console.error('Error fetching tournament data:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
