@@ -13,6 +13,9 @@ interface ESPNPlayer {
   athlete: {
     displayName: string;
     fullName: string;
+    flag?: {
+      alt: string;
+    };
   };
   score: string;
   status?: string;
@@ -180,7 +183,11 @@ serve(async (req) => {
           }
         }
 
-        console.log(`Processed player: ${player.athlete.displayName}, Position: ${position}, Score: ${score}`);
+        // Extract country information from the flag
+        const country = player.athlete?.flag?.alt || null;
+        console.log(`Player ${player.athlete.displayName} country: "${country}"`);
+
+        console.log(`Processed player: ${player.athlete.displayName}, Position: ${position}, Score: ${score}, Country: ${country}`);
 
         return {
           tournament_id: tournamentId,
@@ -188,7 +195,8 @@ serve(async (req) => {
           current_score: score,
           position: position,
           rounds_played: 2, // Default assumption
-          previous_position: null
+          previous_position: null,
+          country: country
         };
       })
       .slice(0, 50); // Get top 50 players
@@ -230,7 +238,7 @@ serve(async (req) => {
       throw insertError;
     }
 
-    console.log(`Successfully updated ${playerUpdates.length} player scores`);
+    console.log(`Successfully updated ${playerUpdates.length} player scores with country information`);
 
     return new Response(JSON.stringify({ 
       success: true,
