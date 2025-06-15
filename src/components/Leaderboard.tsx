@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Trophy, Clock, MapPin, RefreshCw } from 'lucide-react';
+import { Trophy, Clock, RefreshCw } from 'lucide-react';
 import PlayerCard from './PlayerCard';
 import { useTournamentData } from '../hooks/useTournamentData';
 
@@ -92,10 +91,6 @@ const Leaderboard: React.FC = () => {
             <div className="flex items-center">
               <Clock className="w-5 h-5 mr-2" />
               <span className="text-lg font-medium">Live</span>
-            </div>
-            <div className="flex items-center">
-              <MapPin className="w-5 h-5 mr-2" />
-              <span className="text-lg font-medium">{tournament.location}</span>
             </div>
             <div className="text-lg font-medium">
               {formatDateTime(currentTime)}
