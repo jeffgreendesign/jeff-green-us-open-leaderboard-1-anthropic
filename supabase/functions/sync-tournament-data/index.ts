@@ -50,30 +50,62 @@ serve(async (req) => {
   try {
     console.log('Starting tournament data sync...');
     
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase environment variables');
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Server configuration error' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Fetch current PGA Tour events from ESPN
+    console.log('Fetching ESPN data...');
     const espnResponse = await fetch('https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard');
     
     if (!espnResponse.ok) {
-      throw new Error(`ESPN API error: ${espnResponse.status}`);
+      console.error(`ESPN API error: ${espnResponse.status} - ${espnResponse.statusText}`);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: `ESPN API returned ${espnResponse.status}: ${espnResponse.statusText}` 
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const espnData = await espnResponse.json();
     console.log('ESPN data fetched successfully');
 
+    if (!espnData.events || !Array.isArray(espnData.events) || espnData.events.length === 0) {
+      console.error('No events found in ESPN data');
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'No tournament events found in ESPN data' 
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Find the US Open specifically or any active tournament
-    let activeTournament = espnData.events?.find((event: ESPNTournament) => 
-      event.name.toLowerCase().includes('u.s. open') || 
-      event.name.toLowerCase().includes('us open')
+    let activeTournament = espnData.events.find((event: ESPNTournament) => 
+      event.name && (
+        event.name.toLowerCase().includes('u.s. open') || 
+        event.name.toLowerCase().includes('us open')
+      )
     );
 
     // If no US Open found, look for any live tournament
     if (!activeTournament) {
-      activeTournament = espnData.events?.find((event: ESPNTournament) => 
+      activeTournament = espnData.events.find((event: ESPNTournament) => 
         event.status?.type?.description === 'In Progress' || 
         event.status?.type?.description === 'Live'
       );
@@ -81,16 +113,30 @@ serve(async (req) => {
 
     // Fallback to first available tournament
     if (!activeTournament) {
-      activeTournament = espnData.events?.[0];
+      activeTournament = espnData.events[0];
     }
 
-    if (!activeTournament) {
-      throw new Error('No tournament data found');
+    if (!activeTournament || !activeTournament.name) {
+      console.error('No valid tournament data found');
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'No valid tournament data found in ESPN response' 
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const competition = activeTournament.competitions?.[0];
     if (!competition) {
-      throw new Error('No competition data found');
+      console.error('No competition data found in tournament');
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'No competition data found in tournament' 
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     console.log(`Processing tournament: ${activeTournament.name}`);
@@ -105,7 +151,13 @@ serve(async (req) => {
 
     if (tournamentSelectError) {
       console.error('Error checking existing tournament:', tournamentSelectError);
-      throw tournamentSelectError;
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Database error while checking tournament' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     let tournamentId: string;
@@ -127,9 +179,15 @@ serve(async (req) => {
         .select('id')
         .single();
 
-      if (tournamentInsertError) {
+      if (tournamentInsertError || !newTournament) {
         console.error('Error creating tournament:', tournamentInsertError);
-        throw tournamentInsertError;
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Failed to create tournament in database' 
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       tournamentId = newTournament.id;
@@ -139,6 +197,17 @@ serve(async (req) => {
     // Process players with corrected data structure
     const players = competition.competitors || [];
     console.log(`Processing ${players.length} players from ESPN`);
+
+    if (players.length === 0) {
+      console.warn('No players found in competition data');
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'No players found in tournament data' 
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Log first few players to understand the data structure
     console.log('Sample player data:', JSON.stringify(players.slice(0, 2), null, 2));
@@ -207,11 +276,12 @@ serve(async (req) => {
       console.log('Warning: No valid player data to update - this might indicate a data format issue');
       return new Response(JSON.stringify({ 
         success: false, 
-        message: 'No player data to update - possible data format issue',
+        message: 'No valid player data to update - possible data format issue',
         tournament: activeTournament.name,
         rawPlayersCount: players.length,
         samplePlayer: players[0] || null
       }), {
+        status: 422,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -224,7 +294,13 @@ serve(async (req) => {
 
     if (deleteError) {
       console.error('Error clearing existing scores:', deleteError);
-      throw deleteError;
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Failed to clear existing tournament scores' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Insert new scores
@@ -235,7 +311,13 @@ serve(async (req) => {
     if (insertError) {
       console.error('Error inserting player scores:', insertError);
       console.error('Sample player update:', playerUpdates[0]);
-      throw insertError;
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Failed to insert tournament scores into database' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     console.log(`Successfully updated ${playerUpdates.length} player scores with country information`);
@@ -248,6 +330,7 @@ serve(async (req) => {
       location: competition.venue?.fullName,
       totalPlayersFromESPN: players.length
     }), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
@@ -255,7 +338,7 @@ serve(async (req) => {
     console.error('Error in sync-tournament-data function:', error);
     return new Response(JSON.stringify({ 
       success: false,
-      error: error.message 
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
