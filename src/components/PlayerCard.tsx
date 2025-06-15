@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Trophy, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
@@ -126,12 +125,6 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, index }) => {
             <p className={`text-sm ${getTextColor()} opacity-90`}>
               Score: {player.score > 0 ? '+' : ''}{player.score}
             </p>
-          </div>
-        </div>
-        
-        <div className="text-right">
-          <div className={`text-3xl font-bold ${getTextColor()}`}>
-            {formatPosition()}
           </div>
         </div>
       </div>

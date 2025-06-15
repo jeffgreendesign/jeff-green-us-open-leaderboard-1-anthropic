@@ -11,6 +11,7 @@ export type Database = {
     Tables: {
       tournament_scores: {
         Row: {
+          country: string | null
           created_at: string
           current_score: number
           id: string
@@ -22,6 +23,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          country?: string | null
           created_at?: string
           current_score?: number
           id?: string
@@ -33,6 +35,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          country?: string | null
           created_at?: string
           current_score?: number
           id?: string
