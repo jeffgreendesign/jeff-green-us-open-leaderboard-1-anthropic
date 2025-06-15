@@ -19,6 +19,7 @@ interface TournamentScore {
   position: number;
   previous_position: number | null;
   rounds_played: number;
+  country?: string;
   isTied?: boolean;
 }
 

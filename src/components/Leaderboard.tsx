@@ -146,7 +146,8 @@ const Leaderboard: React.FC = () => {
                     position: player.position,
                     score: player.current_score,
                     previousPosition: player.previous_position || undefined,
-                    isTied: player.isTied
+                    isTied: player.isTied,
+                    country: player.country
                   }} 
                   index={index} 
                 />

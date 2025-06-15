@@ -9,6 +9,7 @@ interface Player {
   score: number;
   previousPosition?: number;
   isTied?: boolean;
+  country?: string;
 }
 
 interface PlayerCardProps {
@@ -49,6 +50,56 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, index }) => {
     return player.isTied ? `#${player.position}T` : `#${player.position}`;
   };
 
+  const getCountryFlag = (country: string | undefined): string => {
+    const countryFlags: { [key: string]: string } = {
+      'United States': '🇺🇸',
+      'USA': '🇺🇸',
+      'US': '🇺🇸',
+      'Spain': '🇪🇸',
+      'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+      'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+      'Ireland': '🇮🇪',
+      'Northern Ireland': '🇬🇧',
+      'South Africa': '🇿🇦',
+      'Australia': '🇦🇺',
+      'Japan': '🇯🇵',
+      'South Korea': '🇰🇷',
+      'Canada': '🇨🇦',
+      'Norway': '🇳🇴',
+      'Sweden': '🇸🇪',
+      'Denmark': '🇩🇰',
+      'Germany': '🇩🇪',
+      'France': '🇫🇷',
+      'Italy': '🇮🇹',
+      'Netherlands': '🇳🇱',
+      'Belgium': '🇧🇪',
+      'Argentina': '🇦🇷',
+      'Chile': '🇨🇱',
+      'Colombia': '🇨🇴',
+      'Mexico': '🇲🇽',
+      'China': '🇨🇳',
+      'Thailand': '🇹🇭',
+      'Malaysia': '🇲🇾',
+      'Singapore': '🇸🇬',
+      'Philippines': '🇵🇭',
+      'India': '🇮🇳',
+      'New Zealand': '🇳🇿',
+      'Brazil': '🇧🇷',
+      'Venezuela': '🇻🇪',
+      'Puerto Rico': '🇵🇷',
+      'Taiwan': '🇹🇼',
+      'Czech Republic': '🇨🇿',
+      'Austria': '🇦🇹',
+      'Switzerland': '🇨🇭',
+      'Finland': '🇫🇮',
+      'Wales': '🏴󠁧󠁢󠁷󠁬󠁳󠁿',
+      'Zimbabwe': '🇿🇼',
+      'Fiji': '🇫🇯'
+    };
+    
+    return country ? countryFlags[country] || '🏌️' : '🏌️';
+  };
+
   return (
     <div 
       className={`${getCardGradient()} rounded-xl p-4 mb-3 shadow-lg transform transition-all duration-500 hover:scale-105 animate-fade-in`}
@@ -64,9 +115,14 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, index }) => {
           </div>
           
           <div>
-            <h3 className={`font-bold text-xl ${getTextColor()}`}>
-              {player.name}
-            </h3>
+            <div className="flex items-center space-x-2">
+              <h3 className={`font-bold text-xl ${getTextColor()}`}>
+                {player.name}
+              </h3>
+              <span className="text-2xl">
+                {getCountryFlag(player.country)}
+              </span>
+            </div>
             <p className={`text-sm ${getTextColor()} opacity-90`}>
               Score: {player.score > 0 ? '+' : ''}{player.score}
             </p>
